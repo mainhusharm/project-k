@@ -125,19 +125,36 @@ async function fetchYFinanceHistoricalData(symbol: string, timeframe: string, ba
   }
 }
 
-// Cache for simulated data to make it stable
-const simulatedDataCache: Record<string, any[]> = {}
+const simulatedDataCache: Record<string, { data: any[], lastUpdate: number, currentPrice: number }> = {}
 
 function generateCandlestickData(symbol: string, bars: number = 100, timeframe: string = '1') {
   const cacheKey = `${symbol}-${timeframe}-${bars}`
+  const now = Math.floor(Date.now() / 1000)
 
-  if (simulatedDataCache[cacheKey]) {
-    return simulatedDataCache[cacheKey]
+  if (simulatedDataCache[cacheKey] && now - simulatedDataCache[cacheKey].lastUpdate < 60) {
+    const cached = simulatedDataCache[cacheKey]
+    const lastCandle = cached.data[cached.data.length - 1]
+
+    const variation = (Math.random() - 0.5) * (cached.currentPrice * 0.0005)
+    const newPrice = cached.currentPrice + variation
+
+    const updatedLastCandle = {
+      ...lastCandle,
+      close: newPrice,
+      high: Math.max(lastCandle.high, newPrice),
+      low: Math.min(lastCandle.low, newPrice),
+    }
+
+    cached.data[cached.data.length - 1] = updatedLastCandle
+    cached.currentPrice = newPrice
+    cached.lastUpdate = now
+
+    return cached.data
   }
 
   const basePrice = BASE_PRICES[symbol] || 1.0
   const candlesticks = []
-  const now = Math.floor(Date.now() / 1000)
+  const startTime = Math.floor(Date.now() / 1000)
 
   const intervalMap: Record<string, number> = {
     '1': 60,
@@ -158,9 +175,9 @@ function generateCandlestickData(symbol: string, bars: number = 100, timeframe: 
   let currentPrice = basePrice
 
   for (let i = bars; i >= 0; i--) {
-    const timestamp = now - (i * interval)
+    const timestamp = startTime - (i * interval)
 
-    const volatility = basePrice * 0.0005
+    const volatility = basePrice * 0.0008
     const change = (random() - 0.5) * volatility
     const open = currentPrice
     const close = currentPrice + change
@@ -180,7 +197,11 @@ function generateCandlestickData(symbol: string, bars: number = 100, timeframe: 
     currentPrice = close
   }
 
-  simulatedDataCache[cacheKey] = candlesticks
+  simulatedDataCache[cacheKey] = {
+    data: candlesticks,
+    lastUpdate: startTime,
+    currentPrice: currentPrice
+  }
   return candlesticks
 }
 

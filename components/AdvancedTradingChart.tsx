@@ -1,12 +1,9 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { createChart, ColorType, ISeriesApi, IChartApi, LineStyle } from 'lightweight-charts'
+import { createChart, ColorType, ISeriesApi, IChartApi, LineStyle, Time, SeriesMarker } from 'lightweight-charts'
 import { Button } from './ui/button'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog'
-import { Input } from './ui/input'
-import { Label } from './ui/label'
-import { TrendingUp, Minus, Type, Square, Settings } from 'lucide-react'
+import { TrendingUp, Minus, Type, Square } from 'lucide-react'
 
 interface Position {
   id: string
@@ -39,9 +36,9 @@ export function AdvancedTradingChart({ symbol, positions = [], height = 500 }: A
   const positionLinesRef = useRef<any[]>([])
   const userZoomedRef = useRef<boolean>(false)
   const lastTimeframeRef = useRef<string>('1')
-
-  // Track timeframe changes to detect fresh loads
   const timeframeChangedRef = useRef<boolean>(false)
+  const lastPriceRef = useRef<number | null>(null)
+  const updateIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
   const timeframes = [
     { label: '1m', value: '1' },
@@ -103,11 +100,17 @@ export function AdvancedTradingChart({ symbol, positions = [], height = 500 }: A
     window.addEventListener('resize', handleResize)
 
     loadChartData()
-    const interval = setInterval(() => loadChartData(), 5000)
+    const chartInterval = setInterval(() => loadChartData(), 5000)
+
+    const priceUpdateInterval = setInterval(() => updateRealtimePrice(), 2000)
+    updateIntervalRef.current = priceUpdateInterval
 
     return () => {
       window.removeEventListener('resize', handleResize)
-      clearInterval(interval)
+      clearInterval(chartInterval)
+      if (updateIntervalRef.current) {
+        clearInterval(updateIntervalRef.current)
+      }
       if (chartRef.current) {
         chartRef.current.remove()
       }
@@ -115,8 +118,6 @@ export function AdvancedTradingChart({ symbol, positions = [], height = 500 }: A
   }, [symbol, height, timeframe])
 
   useEffect(() => {
-    // IMPORTANT: Position updates shoul/ NEVER cause chart /epPORTANT Pgion updates should NEVER cause chart repositioning
-    // The zoom state must be preserved across position changes
     console.log('Updating position lines - preserving zoom state')
     drawPositionLines()
   }, [positions])
@@ -161,71 +162,88 @@ export function AdvancedTradingChart({ symbol, positions = [], height = 500 }: A
 
   const loadChartData = async () => {
     try {
-      // Get historical candlestick data from yfinance
       const res = await fetch(`/api/trading/chart-data/${symbol}?bars=100&timeframe=${timeframe}`)
 
       if (res.ok && candlestickSeriesRef.current) {
         const data = await res.json()
         if (data.candlesticks && Array.isArray(data.candlesticks) && data.candlesticks.length > 0) {
-          console.log(`Loaded ${data.candlesticks.length} candlesticks from ${data.source} for ${symbol}`)
-
-          // Sort by time to ensure proper ordering
           const chartData = data.candlesticks.sort((a: any, b: any) => a.time - b.time)
 
           candlestickSeriesRef.current.setData(chartData)
 
+          if (chartData.length > 0) {
+            lastPriceRef.current = chartData[chartData.length - 1].close
+          }
+
           if (chartRef.current?.timeScale) {
-            // Only auto-position chart on fresh timeframe loads, not on automatic updates
             setTimeout(() => {
               if (chartRef.current?.timeScale) {
                 try {
-                  // Calculate and set a stable logical range that keeps recent data visible
-                  const visibleCandles = 25
+                  const visibleCandles = 50
                   const totalDataPoints = chartData.length
 
-                  // Only apply default zoom on fresh timeframe changes, not automatic updates
                   if (timeframeChangedRef.current && !userZoomedRef.current) {
                     if (totalDataPoints > visibleCandles) {
-                      // Set logical range: from latest-25 to latest, ensuring right edge shows recent data
                       chartRef.current.timeScale().setVisibleLogicalRange({
-                        from: totalDataPoints - visibleCandles, // Start point (25 candles back)
-                        to: totalDataPoints - 1 // End point (most recent candle)
+                        from: totalDataPoints - visibleCandles,
+                        to: totalDataPoints - 1
                       })
                     } else {
-                      // If we have fewer data points, show all of them
                       chartRef.current.timeScale().fitContent()
                     }
-                    // Mark timeframe change as handled
                     timeframeChangedRef.current = false
                   }
-                  // If user has manually zoomed, never touch the zoom level on data updates
                 } catch (error) {
                   console.warn('Chart range setting failed:', error)
-                  try {
-                    // Last resort fallback
-                    chartRef.current.timeScale().fitContent()
-                  } catch (fitError) {
-                    console.warn('Even fitContent failed:', fitError)
-                  }
                 }
               }
             }, 100)
           }
-        } else {
-          console.warn('No candlestick data available')
         }
-      } else {
-        console.error('Failed to load chart data:', res.status, res.statusText)
       }
     } catch (error) {
       console.error('Error loading chart data:', error)
     }
   }
 
+  const updateRealtimePrice = async () => {
+    if (!candlestickSeriesRef.current) return
+
+    try {
+      const res = await fetch(`/api/trading/market-data/${symbol}`)
+      if (res.ok) {
+        const data = await res.json()
+        const currentPrice = data.price?.bid
+
+        if (currentPrice && lastPriceRef.current) {
+          const now = Math.floor(Date.now() / 1000) as Time
+          const lastCandle = candlestickSeriesRef.current.dataByIndex(999999)
+
+          if (lastCandle) {
+            const variation = (Math.random() - 0.5) * (currentPrice * 0.0001)
+            const newPrice = currentPrice + variation
+
+            const updatedCandle = {
+              time: now,
+              open: lastPriceRef.current,
+              high: Math.max(lastPriceRef.current, newPrice),
+              low: Math.min(lastPriceRef.current, newPrice),
+              close: newPrice
+            }
+
+            candlestickSeriesRef.current.update(updatedCandle)
+            lastPriceRef.current = newPrice
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error updating realtime price:', error)
+    }
+  }
+
   const drawPositionLines = () => {
     if (!candlestickSeriesRef.current) return
 
-    // Clear existing position lines
     positionLinesRef.current.forEach(line => {
       try {
         candlestickSeriesRef.current?.removePriceLine(line)
@@ -233,41 +251,75 @@ export function AdvancedTradingChart({ symbol, positions = [], height = 500 }: A
     })
     positionLinesRef.current = []
 
+    const markers: SeriesMarker<Time>[] = []
+
     positions.forEach((position) => {
       if (!candlestickSeriesRef.current) return
 
-      const color = position.type === 'BUY' ? '#10b981' : '#ef4444'
+      const isBuy = position.type === 'BUY'
+      const lineColor = isBuy ? '#3b82f6' : '#ef4444'
+      const bgColor = isBuy ? 'rgba(59, 130, 246, 0.1)' : 'rgba(239, 68, 68, 0.1)'
       const pnlSign = position.profit >= 0 ? '+' : ''
 
+      const lotDisplay = position.volume.toFixed(2)
+      const profitDisplay = `${pnlSign}$${Math.abs(position.profit).toFixed(2)}`
+      const pipsDisplay = `${pnlSign}${Math.abs(position.pips).toFixed(1)}`
+
       try {
-        // Create price line for entry
-        const priceLine = candlestickSeriesRef.current.createPriceLine({
+        const entryLine = candlestickSeriesRef.current.createPriceLine({
           price: position.open_price,
-          color: color,
+          color: lineColor,
           lineWidth: 2,
           lineStyle: LineStyle.Solid,
           axisLabelVisible: true,
-          title: `${position.type} ${position.volume} @ ${position.open_price.toFixed(5)} | ${pnlSign}${position.pips} pips | ${pnlSign}$${position.profit.toFixed(2)}`,
+          title: `${isBuy ? '🔵' : '🔴'} ${position.type} ${lotDisplay} | ${profitDisplay} | ${pipsDisplay} pips`,
         })
-        positionLinesRef.current.push(priceLine)
+        positionLinesRef.current.push(entryLine)
 
-        // Create entry marker
-        const markers = [{
-          time: Math.floor(new Date(position.open_time).getTime() / 1000) as any,
-          position: (position.type === 'BUY' ? 'belowBar' : 'aboveBar') as any,
-          color: color,
-          shape: (position.type === 'BUY' ? 'arrowUp' : 'arrowDown') as any,
-          text: `${position.type}`,
-        }]
+        if (position.stop_loss) {
+          const slLine = candlestickSeriesRef.current.createPriceLine({
+            price: position.stop_loss,
+            color: '#ef4444',
+            lineWidth: 1,
+            lineStyle: LineStyle.Dashed,
+            axisLabelVisible: true,
+            title: `SL ${position.stop_loss.toFixed(5)}`,
+          })
+          positionLinesRef.current.push(slLine)
+        }
 
-        candlestickSeriesRef.current.setMarkers(markers)
+        if (position.take_profit) {
+          const tpLine = candlestickSeriesRef.current.createPriceLine({
+            price: position.take_profit,
+            color: '#10b981',
+            lineWidth: 1,
+            lineStyle: LineStyle.Dashed,
+            axisLabelVisible: true,
+            title: `TP ${position.take_profit.toFixed(5)}`,
+          })
+          positionLinesRef.current.push(tpLine)
+        }
+
+        const entryTime = Math.floor(new Date(position.open_time).getTime() / 1000) as Time
+        markers.push({
+          time: entryTime,
+          position: isBuy ? 'belowBar' : 'aboveBar',
+          color: lineColor,
+          shape: isBuy ? 'arrowUp' : 'arrowDown',
+          text: `${isBuy ? 'BUY' : 'SELL'} ${lotDisplay}`,
+        })
       } catch (error) {
         console.error('Error drawing position line:', error)
       }
     })
 
-    // Position line updates should NEVER trigger chart auto-positioning
-    // The zoom state should remain exactly as user set it
+    if (markers.length > 0) {
+      try {
+        candlestickSeriesRef.current.setMarkers(markers)
+      } catch (error) {
+        console.error('Error setting markers:', error)
+      }
+    }
   }
 
   const drawingTools = [
@@ -324,13 +376,28 @@ export function AdvancedTradingChart({ symbol, positions = [], height = 500 }: A
       />
 
       {positions.length > 0 && (
-        <div className="text-xs text-slate-600 bg-slate-50 p-2 rounded flex items-center justify-between">
-          <span>
-            <strong>Open Positions:</strong> {positions.length} position{positions.length !== 1 ? 's' : ''} shown on chart
-          </span>
-          <span className="text-xs text-slate-500">
-            Lines show entry prices with live P&L
-          </span>
+        <div className="text-xs bg-blue-50 border border-blue-200 p-3 rounded-lg">
+          <div className="flex items-start gap-4">
+            <div>
+              <span className="font-semibold text-slate-900">{positions.length}</span>
+              <span className="text-slate-600 ml-1">open position{positions.length !== 1 ? 's' : ''}</span>
+            </div>
+            <div className="flex-1 space-y-1">
+              {positions.map((pos, idx) => {
+                const pnlColor = pos.profit >= 0 ? 'text-green-600' : 'text-red-600'
+                return (
+                  <div key={pos.id} className="flex items-center justify-between text-xs">
+                    <span className="font-medium">
+                      {pos.type === 'BUY' ? '🔵' : '🔴'} {pos.symbol} {pos.volume}
+                    </span>
+                    <span className={pnlColor}>
+                      {pos.profit >= 0 ? '+' : ''}${pos.profit.toFixed(2)} ({pos.profit >= 0 ? '+' : ''}{pos.pips.toFixed(1)} pips)
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
         </div>
       )}
     </div>

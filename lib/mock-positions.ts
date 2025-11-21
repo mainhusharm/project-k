@@ -31,7 +31,7 @@ function savePersistedTrades() {
     fs.writeFileSync(TRADES_FILE, JSON.stringify(mockTradesStore, null, 2))
     console.log('Saved persisted trades to file')
   } catch (error) {
-    console.log('Could not save persisted trades:', error.message)
+    console.log('Could not save persisted trades:', error instanceof Error ? error.message : String(error))
   }
 }
 

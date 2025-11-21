@@ -427,28 +427,28 @@ export default function TradingPage() {
         </Card>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-4">
+      <div className="grid gap-6 lg:grid-cols-[280px_1fr_320px]">
         <Card className="shadow-md">
-          <CardHeader>
-            <CardTitle className="text-lg">Market Watch</CardTitle>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Market Watch</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-1 max-h-[500px] overflow-y-auto">
+            <div className="space-y-0.5 max-h-[600px] overflow-y-auto">
               {SYMBOLS.map((symbol) => {
                 const price = prices[symbol]
                 return (
                   <button
                     key={symbol}
                     onClick={() => setSelectedSymbol(symbol)}
-                    className={`flex w-full items-center justify-between rounded px-3 py-2 hover:bg-slate-100 transition ${
-                      selectedSymbol === symbol ? 'bg-blue-50 border border-blue-200' : ''
+                    className={`flex w-full items-center justify-between rounded px-2.5 py-2 hover:bg-slate-100 transition ${
+                      selectedSymbol === symbol ? 'bg-blue-50 border border-blue-300' : ''
                     }`}
                   >
                     <span className="font-semibold text-sm text-slate-900">{symbol}</span>
                     {price && (
-                      <div className="flex gap-3 text-xs">
-                        <span className="text-red-600 font-mono">{price.bid.toFixed(5)}</span>
-                        <span className="text-green-600 font-mono">{price.ask.toFixed(5)}</span>
+                      <div className="flex gap-2 text-xs">
+                        <span className="text-red-600 font-mono w-16 text-right">{price.bid.toFixed(5)}</span>
+                        <span className="text-green-600 font-mono w-16 text-right">{price.ask.toFixed(5)}</span>
                       </div>
                     )}
                   </button>
@@ -458,101 +458,125 @@ export default function TradingPage() {
           </CardContent>
         </Card>
 
-        <Card className="lg:col-span-2 shadow-md">
-          <CardHeader>
-            <CardTitle className="text-lg">{selectedSymbol} Chart</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <AdvancedTradingChart
-              symbol={selectedSymbol}
-              positions={positions.filter(p => p.symbol === selectedSymbol)}
-              height={450}
-            />
-
-            {currentPrice && (
-              <div className="grid grid-cols-2 gap-4 p-4 bg-slate-50 rounded-lg">
-                <div>
-                  <p className="text-xs text-slate-600 mb-1">BID</p>
-                  <p className="text-2xl font-bold text-red-600 font-mono">
-                    {currentPrice.bid.toFixed(5)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-600 mb-1">ASK</p>
-                  <p className="text-2xl font-bold text-green-600 font-mono">
-                    {currentPrice.ask.toFixed(5)}
-                  </p>
-                </div>
+        <div className="space-y-4">
+          <Card className="shadow-md">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base font-semibold">{selectedSymbol}</CardTitle>
+                {currentPrice && (
+                  <div className="flex gap-6 text-sm">
+                    <div>
+                      <span className="text-xs text-slate-500 mr-2">BID</span>
+                      <span className="font-bold text-red-600 font-mono text-base">
+                        {currentPrice.bid.toFixed(5)}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-xs text-slate-500 mr-2">ASK</span>
+                      <span className="font-bold text-green-600 font-mono text-base">
+                        {currentPrice.ask.toFixed(5)}
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
-          </CardContent>
-        </Card>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <AdvancedTradingChart
+                symbol={selectedSymbol}
+                positions={positions.filter(p => p.symbol === selectedSymbol)}
+                height={500}
+              />
+            </CardContent>
+          </Card>
+        </div>
 
-        <Card className="shadow-md">
-          <CardHeader>
-            <CardTitle className="text-lg">New Order</CardTitle>
+        <Card className="shadow-md h-fit">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">New Order</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label className="text-sm">Volume (lots)</Label>
-              <Input
-                type="number"
-                step="0.01"
-                value={volume}
-                onChange={(e) => setVolume(e.target.value)}
-                className="font-mono"
-              />
+            <div className="space-y-3">
+              <div>
+                <Label className="text-xs text-slate-600 font-medium">Volume (lots)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={volume}
+                  onChange={(e) => setVolume(e.target.value)}
+                  className="font-mono mt-1 h-9"
+                />
+              </div>
+
+              <div>
+                <Label className="text-xs text-slate-600 font-medium">Stop Loss (optional)</Label>
+                <Input
+                  type="number"
+                  step="0.00001"
+                  value={stopLoss}
+                  onChange={(e) => setStopLoss(e.target.value)}
+                  placeholder="0.00000"
+                  className="font-mono text-sm mt-1 h-9"
+                />
+              </div>
+
+              <div>
+                <Label className="text-xs text-slate-600 font-medium">Take Profit (optional)</Label>
+                <Input
+                  type="number"
+                  step="0.00001"
+                  value={takeProfit}
+                  onChange={(e) => setTakeProfit(e.target.value)}
+                  placeholder="0.00000"
+                  className="font-mono text-sm mt-1 h-9"
+                />
+              </div>
             </div>
 
-            <div className="space-y-2">
-              <Label className="text-sm">Stop Loss (optional)</Label>
-              <Input
-                type="number"
-                step="0.00001"
-                value={stopLoss}
-                onChange={(e) => setStopLoss(e.target.value)}
-                placeholder="0.00000"
-                className="font-mono text-sm"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-sm">Take Profit (optional)</Label>
-              <Input
-                type="number"
-                step="0.00001"
-                value={takeProfit}
-                onChange={(e) => setTakeProfit(e.target.value)}
-                placeholder="0.00000"
-                className="font-mono text-sm"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-2 pt-2">
               <Button
                 onClick={() => executeTrade('BUY')}
                 disabled={loading}
-                className="bg-green-600 hover:bg-green-700 gap-2"
+                className="bg-green-600 hover:bg-green-700 h-11 text-sm font-semibold"
               >
-                <ArrowUpCircle className="h-4 w-4" />
+                <ArrowUpCircle className="h-4 w-4 mr-2" />
                 BUY
               </Button>
               <Button
                 onClick={() => executeTrade('SELL')}
                 disabled={loading}
-                className="bg-red-600 hover:bg-red-700 gap-2"
+                className="bg-red-600 hover:bg-red-700 h-11 text-sm font-semibold"
               >
-                <ArrowDownCircle className="h-4 w-4" />
+                <ArrowDownCircle className="h-4 w-4 mr-2" />
                 SELL
               </Button>
             </div>
+
+            {currentPrice && (
+              <div className="pt-3 border-t">
+                <div className="text-xs text-slate-600 space-y-1">
+                  <div className="flex justify-between">
+                    <span>Current Bid:</span>
+                    <span className="font-mono font-semibold text-red-600">{currentPrice.bid.toFixed(5)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Current Ask:</span>
+                    <span className="font-mono font-semibold text-green-600">{currentPrice.ask.toFixed(5)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Spread:</span>
+                    <span className="font-mono">{((currentPrice.ask - currentPrice.bid) * 10000).toFixed(1)} pips</span>
+                  </div>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
 
       <Card className="shadow-md">
-        <CardHeader>
-          <CardTitle className="text-lg">Positions & History</CardTitle>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Positions & History</CardTitle>
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="open" className="w-full">

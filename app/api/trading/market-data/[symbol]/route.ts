@@ -20,8 +20,8 @@ const SYMBOL_MAP: Record<string, string> = {
   'ETHUSD': 'ETH-USD',
 }
 
-const priceCache: Record<string, { price: any; timestamp: number }> = {}
-const CACHE_DURATION = 2000
+const priceCache: Record<string, { price: any; timestamp: number; basePrice: number }> = {}
+const CACHE_DURATION = 1500
 
 export async function GET(
   req: NextRequest,
@@ -63,7 +63,7 @@ export async function GET(
             timestamp: new Date().toISOString(),
           }
 
-          priceCache[symbol] = { price: marketPrice, timestamp: now }
+          priceCache[symbol] = { price: marketPrice, timestamp: now, basePrice: price }
           return NextResponse.json({ price: marketPrice })
         }
       }
@@ -91,8 +91,15 @@ export async function GET(
       ETHUSD: 3200.00,
     }
 
-    const basePrice = fallbackPrices[symbol] || 1.0
-    const variation = (Math.random() - 0.5) * 0.001
+    let basePrice = fallbackPrices[symbol] || 1.0
+
+    if (priceCache[symbol]?.basePrice) {
+      basePrice = priceCache[symbol].basePrice
+    }
+
+    const volatilityMultiplier = symbol.includes('BTC') || symbol.includes('ETH') ? 0.002 : 0.0008
+    const trendBias = (Math.random() - 0.48)
+    const variation = trendBias * basePrice * volatilityMultiplier
     const price = basePrice + variation
     const spread = price * 0.0002
 
@@ -103,7 +110,7 @@ export async function GET(
       timestamp: new Date().toISOString(),
     }
 
-    priceCache[symbol] = { price: fallbackPrice, timestamp: now }
+    priceCache[symbol] = { price: fallbackPrice, timestamp: now, basePrice: price }
     return NextResponse.json({ price: fallbackPrice })
   } catch (error) {
     console.error('Error fetching price for', params.symbol, error)
