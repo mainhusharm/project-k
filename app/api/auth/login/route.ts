@@ -56,16 +56,29 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    console.log('Verifying password...')
     const validPassword = await bcrypt.compare(password, user.password)
 
     if (!validPassword) {
+      console.log('Password invalid')
       return NextResponse.json(
         { error: 'Invalid credentials' },
         { status: 401 }
       )
     }
 
-    const token = await createToken(user.id)
+    console.log('Password valid, creating token...')
+    let token
+    try {
+      token = await createToken(user.id)
+      console.log('JWT token created successfully')
+    } catch (tokenError) {
+      console.error('Error creating JWT token:', tokenError)
+      return NextResponse.json(
+        { error: 'Failed to create authentication token', details: tokenError instanceof Error ? tokenError.message : 'Unknown' },
+        { status: 500 }
+      )
+    }
 
     const response = NextResponse.json({
       user: {

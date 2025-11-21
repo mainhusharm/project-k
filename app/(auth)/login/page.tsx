@@ -27,7 +27,13 @@ export default function LoginPage() {
         body: JSON.stringify({ email, password }),
       })
 
-      const data = await res.json()
+      let data
+      try {
+        data = await res.json()
+      } catch (jsonError) {
+        console.error('Failed to parse response as JSON:', jsonError)
+        throw new Error('Server error. Please check console and try again.')
+      }
 
       if (!res.ok) {
         console.error('Login failed:', data)

@@ -87,7 +87,18 @@ export async function POST(req: NextRequest) {
     console.log('User created successfully:', user)
 
     // Create JWT token and log the user in
-    const token = await createToken(user.id)
+    console.log('Creating JWT token for user:', user.id)
+    let token
+    try {
+      token = await createToken(user.id)
+      console.log('JWT token created successfully')
+    } catch (tokenError) {
+      console.error('Error creating JWT token:', tokenError)
+      return NextResponse.json(
+        { error: 'Failed to create authentication token', details: tokenError instanceof Error ? tokenError.message : 'Unknown' },
+        { status: 500 }
+      )
+    }
 
     const response = NextResponse.json({ user })
 
