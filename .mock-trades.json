@@ -1,0 +1,52 @@
+{
+  "MOCK-1763649686718": [
+    {
+      "id": "mock-1763649690712",
+      "ticket": "T49690712",
+      "symbol": "EURUSD",
+      "type": "SELL",
+      "volume": 1,
+      "open_price": 1.15448,
+      "current_price": 1.15448,
+      "stop_loss": null,
+      "take_profit": null,
+      "commission": 7,
+      "swap": 0,
+      "profit": 0,
+      "pips": 0,
+      "open_time": "2025-11-20T14:41:30.712Z"
+    }
+  ],
+  "MOCK-DEMO-PERSISTENT": [
+    {
+      "id": "mock-1763649762063",
+      "ticket": "T49762063",
+      "symbol": "EURUSD",
+      "type": "BUY",
+      "volume": 1,
+      "open_price": 1.15482,
+      "current_price": 1.15482,
+      "stop_loss": null,
+      "take_profit": null,
+      "commission": 7,
+      "swap": 0,
+      "profit": 0,
+      "pips": 0,
+      "open_time": "2025-11-20T14:42:42.063Z"
+    },
+    {
+      "id": "trade-1763657432794",
+      "symbol": "EURUSD",
+      "side": "BUY",
+      "lot_size": 0.01,
+      "entry_price": 1.15382,
+      "exit_price": 1.15358,
+      "pnl": -0.310000000000018,
+      "pips": -2.4,
+      "commission": 0.07,
+      "swap": 0,
+      "open_time": "2025-11-20T16:50:30.078Z",
+      "close_time": "2025-11-20T16:50:32.794Z"
+    }
+  ]
+}

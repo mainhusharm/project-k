@@ -1,0 +1,112 @@
+import { Server as HTTPServer } from 'http'
+import { Server as SocketIOServer } from 'socket.io'
+import { verifyToken } from './auth'
+import { supabase } from './supabase'
+import jwt from 'jsonwebtoken'
+
+export class WebSocketServer {
+  private io: SocketIOServer
+
+  constructor(httpServer: HTTPServer) {
+    this.io = new SocketIOServer(httpServer, {
+      cors: {
+        origin: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+        methods: ['GET', 'POST'],
+      },
+    })
+
+    this.setupHandlers()
+  }
+
+  private setupHandlers() {
+    this.io.on('connection', async (socket) => {
+      console.log('Client connected:', socket.id)
+
+      // Authenticate with JWT token
+      const token = socket.handshake.auth.token
+      if (!token) {
+        socket.disconnect()
+        return
+      }
+
+      try {
+        const payload = jwt.verify(token, process.env.JWT_SECRET!) as any
+
+        // Join user's personal room
+        socket.join(`user:${payload.userId}`)
+
+        // Subscribe to market data
+        socket.on('subscribe:market', (symbols: string[]) => {
+          symbols.forEach((symbol) => {
+            socket.join(`market:${symbol}`)
+          })
+        })
+
+        // Unsubscribe from market data
+        socket.on('unsubscribe:market', (symbols: string[]) => {
+          symbols.forEach((symbol) => {
+            socket.leave(`market:${symbol}`)
+          })
+        })
+
+        // Subscribe to account updates
+        socket.on('subscribe:account', async (accountId: string) => {
+          // Verify user owns this account
+          const { data: account } = await supabase
+            .from('trading_accounts')
+            .select('*')
+            .eq('id', accountId)
+            .eq('user_challenge.user_id', payload.userId)
+            .single()
+
+          if (account) {
+            socket.join(`account:${accountId}`)
+          }
+        })
+
+        socket.on('disconnect', () => {
+          console.log('Client disconnected:', socket.id)
+        })
+
+      } catch (error) {
+        console.log('Authentication failed for socket:', socket.id)
+        socket.disconnect()
+        return
+      }
+    })
+  }
+
+  // Broadcast market price update
+  broadcastMarketPrice(symbol: string, data: any) {
+    this.io.to(`market:${symbol}`).emit('market:price', { symbol, ...data })
+  }
+
+  // Broadcast account update
+  broadcastAccountUpdate(accountId: string, data: any) {
+    this.io.to(`account:${accountId}`).emit('account:update', data)
+  }
+
+  // Broadcast position update
+  broadcastPositionUpdate(accountId: string, position: any) {
+    this.io.to(`account:${accountId}`).emit('position:update', position)
+  }
+
+  // Broadcast order update
+  broadcastOrderUpdate(accountId: string, order: any) {
+    this.io.to(`account:${accountId}`).emit('order:update', order)
+  }
+
+  // Send notification to user
+  sendNotification(userId: string, notification: any) {
+    this.io.to(`user:${userId}`).emit('notification', notification)
+  }
+}
+
+// Singleton instance
+let websocketServer: WebSocketServer | null = null
+
+export function getWebSocketServer(httpServer?: HTTPServer): WebSocketServer {
+  if (!websocketServer && httpServer) {
+    websocketServer = new WebSocketServer(httpServer)
+  }
+  return websocketServer!

@@ -1,0 +1,515 @@
+'use client'
+
+import { useState, useEffect, useRef } from 'react'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Badge } from '@/components/ui/badge'
+import { formatCurrency } from '@/lib/format'
+import { ArrowUpCircle, ArrowDownCircle, TrendingUp, RefreshCw } from 'lucide-react'
+import { TradingViewChart } from '@/components/TradingViewChart'
+
+interface TradingAccount {
+  id: string
+  account_number: string
+  balance: number
+  equity: number
+  margin: number
+  free_margin: number
+  margin_level: number
+  leverage: number
+}
+
+interface Position {
+  id: string
+  ticket: string
+  symbol: string
+  type: 'BUY' | 'SELL'
+  volume: number
+  open_price: number
+  current_price: number
+  profit: number
+  swap: number
+  commission: number
+  stop_loss?: number
+  take_profit?: number
+  open_time: string
+}
+
+interface MarketPrice {
+  symbol: string
+  bid: number
+  ask: number
+  timestamp: string
+}
+
+
+const SYMBOLS = [
+  'EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCAD',
+  'USDCHF', 'NZDUSD', 'EURGBP', 'EURJPY', 'GBPJPY',
+  'GOLD', 'SILVER', 'OIL', 'SPX500', 'NASDAQ',
+  'BTCUSD', 'ETHUSD'
+]
+
+// Demo account for immediate testing
+const DEMO_ACCOUNT: TradingAccount = {
+  id: 'demo-account',
+  account_number: 'DEMO001',
+  balance: 10000,
+  equity: 10000,
+  margin: 0,
+  free_margin: 10000,
+  margin_level: 0,
+  leverage: 100,
+}
+
+
+export default function TradingPage() {
+  const [account, setAccount] = useState<TradingAccount>(DEMO_ACCOUNT)
+  const [positions, setPositions] = useState<Position[]>([])
+  const [prices, setPrices] = useState<Record<string, MarketPrice>>({})
+  const [selectedSymbol, setSelectedSymbol] = useState('EURUSD')
+  const [volume, setVolume] = useState('0.01')
+  const [stopLoss, setStopLoss] = useState('')
+  const [takeProfit, setTakeProfit] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
+
+  useEffect(() => {
+    setupDemoMode()
+    const priceInterval = setInterval(loadPrices, 3000)
+    return () => clearInterval(priceInterval)
+  }, [])
+
+  const setupDemoMode = () => {
+    // Start with demo account immediately
+    loadPrices()
+    // No need for authentication - work in demo mode
+  }
+
+  const setupDemoAccount = async () => {
+    try {
+      console.log('Setting up demo account...')
+      const res = await fetch('/api/demo/setup')
+      const data = await res.json()
+      console.log('Demo setup result:', data)
+    } catch (error) {
+      console.error('Demo setup failed:', error)
+    }
+  }
+
+  const loadAccount = async () => {
+    try {
+      const res = await fetch('/api/user-challenges')
+      const data = await res.json()
+
+      const activeChallenge = data.userChallenges?.find(
+        (uc: any) => uc.status === 'ACTIVE' || uc.status === 'PENDING'
+      )
+
+      if (activeChallenge) {
+        // Try to load account by user challenge ID first
+        try {
+          const accountRes = await fetch(`/api/trading/account/${activeChallenge.trading_account?.id}`)
+          if (accountRes.ok) {
+            const accountData = await accountRes.json()
+            setAccount(accountData.account)
+            setPositions(accountData.positions || [])
+            return
+          }
+        } catch (error) {
+          console.log('Trading account not found, continuing...')
+        }
+
+        // If that fails, try by challenge ID
+        const accountRes = await fetch(`/api/trading/account/${activeChallenge.id}`)
+        const accountData = await accountRes.json()
+        setAccount(accountData.account)
+        setPositions(accountData.positions || [])
+      }
+    } catch (error) {
+      console.error('Failed to load account:', error)
+    }
+  }
+
+  const loadPositions = async () => {
+    if (!account) return
+    try {
+      const res = await fetch(`/api/trading/positions?accountId=${account.id}`)
+      const data = await res.json()
+      setPositions(data.positions || [])
+    } catch (error) {
+      console.error('Failed to load positions:', error)
+    }
+  }
+
+  const loadPrices = async () => {
+    try {
+      const pricePromises = SYMBOLS.map(async (symbol) => {
+        const res = await fetch(`/api/trading/market-data/${symbol}`)
+        const data = await res.json()
+        return { symbol, price: data.price }
+      })
+
+      const results = await Promise.all(pricePromises)
+      const newPrices: Record<string, MarketPrice> = {}
+      results.forEach(({ symbol, price }) => {
+        if (price) {
+          newPrices[symbol] = price
+        }
+      })
+      setPrices(newPrices)
+    } catch (error) {
+      console.error('Failed to load prices:', error)
+    }
+  }
+
+
+  const handleRefresh = async () => {
+    setRefreshing(true)
+    await Promise.all([loadAccount(), loadPrices(), loadPositions()])
+    setRefreshing(false)
+  }
+
+  const executeTrade = async (side: 'BUY' | 'SELL') => {
+    if (!account) return
+
+    setLoading(true)
+    try {
+      const res = await fetch('/api/trading/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tradingAccountId: account.id,
+          symbol: selectedSymbol,
+          type: side,
+          volume: parseFloat(volume),
+          stopLoss: stopLoss ? parseFloat(stopLoss) : undefined,
+          takeProfit: takeProfit ? parseFloat(takeProfit) : undefined,
+        }),
+      })
+
+      if (res.ok) {
+        await loadAccount()
+        alert('Order executed successfully!')
+        setStopLoss('')
+        setTakeProfit('')
+      } else {
+        const error = await res.json()
+        alert(`Error: ${error.error}`)
+      }
+    } catch (error) {
+      alert('Failed to execute order')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const closePosition = async (positionId: string) => {
+    if (!confirm('Are you sure you want to close this position?')) return
+
+    try {
+      const res = await fetch(`/api/trading/positions/${positionId}/close`, {
+        method: 'POST',
+      })
+
+      if (res.ok) {
+        await loadAccount()
+        alert('Position closed successfully!')
+      } else {
+        const error = await res.json()
+        alert(`Error: ${error.error}`)
+      }
+    } catch (error) {
+      alert('Failed to close position')
+    }
+  }
+
+  if (!account) {
+    return (
+      <div className="space-y-8">
+        <h1 className="text-3xl font-bold text-slate-900">Trading Platform</h1>
+        <Card className="shadow-md">
+          <CardContent className="py-10 text-center">
+            <TrendingUp className="h-12 w-12 text-slate-300 mx-auto mb-3" />
+            <p className="text-slate-600 font-medium">No active trading account found</p>
+            <p className="text-slate-500 text-sm mt-1">
+              Purchase a challenge to start trading
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  const currentPrice = prices[selectedSymbol]
+  const totalPnL = positions.reduce((sum, p) => sum + p.profit - p.commission - p.swap, 0)
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-900">Trading Platform</h1>
+          <p className="text-slate-600 mt-1">Account: {account.account_number}</p>
+        </div>
+        <Button variant="outline" size="sm" onClick={handleRefresh} disabled={refreshing}>
+          <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+          Refresh
+        </Button>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-5">
+        <Card className="shadow-md">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-slate-600">Balance</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold text-slate-900">{formatCurrency(account.balance)}</p>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-md">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-slate-600">Equity</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold text-slate-900">{formatCurrency(account.equity)}</p>
+            <p className={`text-xs mt-1 ${totalPnL >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              {totalPnL >= 0 ? '+' : ''}{formatCurrency(totalPnL)}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-md">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-slate-600">Margin</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold text-slate-900">{formatCurrency(account.margin)}</p>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-md">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-slate-600">Free Margin</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold text-slate-900">{formatCurrency(account.free_margin)}</p>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-md">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-slate-600">Margin Level</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className={`text-2xl font-bold ${
+              account.margin_level >= 100 ? 'text-green-600' :
+              account.margin_level >= 50 ? 'text-yellow-600' : 'text-red-600'
+            }`}>
+              {account.margin_level.toFixed(2)}%
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-4">
+        <Card className="shadow-md">
+          <CardHeader>
+            <CardTitle className="text-lg">Market Watch</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-1 max-h-[500px] overflow-y-auto">
+              {SYMBOLS.map((symbol) => {
+                const price = prices[symbol]
+                return (
+                  <button
+                    key={symbol}
+                    onClick={() => setSelectedSymbol(symbol)}
+                    className={`flex w-full items-center justify-between rounded px-3 py-2 hover:bg-slate-100 transition ${
+                      selectedSymbol === symbol ? 'bg-blue-50 border border-blue-200' : ''
+                    }`}
+                  >
+                    <span className="font-semibold text-sm text-slate-900">{symbol}</span>
+                    {price && (
+                      <div className="flex gap-3 text-xs">
+                        <span className="text-red-600 font-mono">{price.bid.toFixed(5)}</span>
+                        <span className="text-green-600 font-mono">{price.ask.toFixed(5)}</span>
+                      </div>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="lg:col-span-2 shadow-md">
+          <CardHeader>
+            <CardTitle className="text-lg">{selectedSymbol} Chart</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <TradingViewChart symbol={selectedSymbol} height={400} />
+
+            {currentPrice && (
+              <div className="grid grid-cols-2 gap-4 p-4 bg-slate-50 rounded-lg">
+                <div>
+                  <p className="text-xs text-slate-600 mb-1">BID</p>
+                  <p className="text-2xl font-bold text-red-600 font-mono">
+                    {currentPrice.bid.toFixed(5)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-600 mb-1">ASK</p>
+                  <p className="text-2xl font-bold text-green-600 font-mono">
+                    {currentPrice.ask.toFixed(5)}
+                  </p>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-md">
+          <CardHeader>
+            <CardTitle className="text-lg">New Order</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label className="text-sm">Volume (lots)</Label>
+              <Input
+                type="number"
+                step="0.01"
+                value={volume}
+                onChange={(e) => setVolume(e.target.value)}
+                className="font-mono"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-sm">Stop Loss (optional)</Label>
+              <Input
+                type="number"
+                step="0.00001"
+                value={stopLoss}
+                onChange={(e) => setStopLoss(e.target.value)}
+                placeholder="0.00000"
+                className="font-mono text-sm"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-sm">Take Profit (optional)</Label>
+              <Input
+                type="number"
+                step="0.00001"
+                value={takeProfit}
+                onChange={(e) => setTakeProfit(e.target.value)}
+                placeholder="0.00000"
+                className="font-mono text-sm"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                onClick={() => executeTrade('BUY')}
+                disabled={loading}
+                className="bg-green-600 hover:bg-green-700 gap-2"
+              >
+                <ArrowUpCircle className="h-4 w-4" />
+                BUY
+              </Button>
+              <Button
+                onClick={() => executeTrade('SELL')}
+                disabled={loading}
+                className="bg-red-600 hover:bg-red-700 gap-2"
+              >
+                <ArrowDownCircle className="h-4 w-4" />
+                SELL
+              </Button>
+            </div>
+
+            <div className="pt-4 border-t space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-slate-600">Leverage:</span>
+                <span className="font-semibold">1:{account.leverage}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-600">Open Positions:</span>
+                <span className="font-semibold">{positions.length}</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card className="shadow-md">
+        <CardHeader>
+          <CardTitle className="text-lg">Open Positions</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {positions.length === 0 ? (
+            <p className="py-8 text-center text-slate-600">No open positions</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left text-slate-600">
+                    <th className="pb-2 font-medium">Ticket</th>
+                    <th className="pb-2 font-medium">Symbol</th>
+                    <th className="pb-2 font-medium">Type</th>
+                    <th className="pb-2 font-medium">Volume</th>
+                    <th className="pb-2 font-medium">Open Price</th>
+                    <th className="pb-2 font-medium">Current Price</th>
+                    <th className="pb-2 font-medium">P&L</th>
+                    <th className="pb-2 font-medium">SL/TP</th>
+                    <th className="pb-2 font-medium">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {positions.map((position) => {
+                    const netPnL = position.profit - position.commission - position.swap
+                    return (
+                      <tr key={position.id} className="border-b hover:bg-slate-50">
+                        <td className="py-3 font-mono text-xs">{position.ticket}</td>
+                        <td className="font-semibold">{position.symbol}</td>
+                        <td>
+                          <Badge
+                            variant={position.type === 'BUY' ? 'default' : 'secondary'}
+                            className={position.type === 'BUY' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}
+                          >
+                            {position.type}
+                          </Badge>
+                        </td>
+                        <td>{position.volume}</td>
+                        <td className="font-mono">{position.open_price.toFixed(5)}</td>
+                        <td className="font-mono">{position.current_price.toFixed(5)}</td>
+                        <td className={`font-semibold ${netPnL >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {formatCurrency(netPnL)}
+                        </td>
+                        <td className="text-xs">
+                          {position.stop_loss && <div>SL: {position.stop_loss.toFixed(5)}</div>}
+                          {position.take_profit && <div>TP: {position.take_profit.toFixed(5)}</div>}
+                        </td>
+                        <td>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => closePosition(position.id)}
+                          >
+                            Close
+                          </Button>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
