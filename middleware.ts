@@ -11,8 +11,18 @@ const publicPaths = ['/login', '/register', '/api/auth/login', '/api/auth/regist
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
+  // Allow public auth routes without authentication
+  if (pathname.startsWith('/api/auth/login') || pathname.startsWith('/api/auth/register')) {
+    return NextResponse.next()
+  }
+
   // Allow trading APIs without authentication for demo
   if (pathname.startsWith('/api/trading') || pathname.startsWith('/api/demo')) {
+    return NextResponse.next()
+  }
+
+  // Allow test endpoints
+  if (pathname.startsWith('/api/test-')) {
     return NextResponse.next()
   }
 
