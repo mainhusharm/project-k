@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import { TrendingUp, LogOut, LayoutDashboard, Trophy, LineChart } from 'lucide-react'
+import { TrendingUp, LogOut, LayoutDashboard, Trophy, LineChart, Monitor } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 
@@ -51,6 +51,12 @@ export default function DashboardLayout({
                 <Button variant="ghost" size="sm" className="gap-2">
                   <LineChart className="h-4 w-4" />
                   Trading
+                </Button>
+              </Link>
+              <Link href="/dashboard/terminal">
+                <Button variant="ghost" size="sm" className="gap-2">
+                  <Monitor className="h-4 w-4" />
+                  Web Terminal
                 </Button>
               </Link>
             </nav>

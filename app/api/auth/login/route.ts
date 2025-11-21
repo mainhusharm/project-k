@@ -4,11 +4,16 @@ import bcrypt from 'bcryptjs'
 import { createToken } from '@/lib/auth'
 import { z } from 'zod'
 
-// Use Supabase client for login with anon key
-// RLS policies allow reading user data for login verification
+// Use Supabase client with service role for secure server-side operations
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co',
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-key'
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
+    }
+  }
 )
 
 const loginSchema = z.object({

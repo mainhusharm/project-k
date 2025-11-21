@@ -6,11 +6,16 @@ import { z } from 'zod'
 
 
 
-// Create a Supabase client for user registration
-// Using anon key since we have RLS policy allowing registration
+// Use Supabase client with service role for secure server-side operations
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co',
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-key'
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
+    }
+  }
 )
 
 const registerSchema = z.object({
