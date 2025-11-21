@@ -30,12 +30,16 @@ export default function LoginPage() {
       const data = await res.json()
 
       if (!res.ok) {
-        throw new Error(data.error || 'Login failed')
+        console.error('Login failed:', data)
+        const errorMsg = data.details ? `${data.error}: ${data.details}` : (data.error || 'Login failed')
+        throw new Error(errorMsg)
       }
 
+      console.log('Login successful')
       router.push('/dashboard')
       router.refresh()
     } catch (err: any) {
+      console.error('Login error:', err)
       setError(err.message)
     } finally {
       setLoading(false)

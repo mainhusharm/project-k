@@ -26,20 +26,31 @@ const registerSchema = z.object({
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json()
-    const { email, password, name } = registerSchema.parse(body)
+    console.log('=== REGISTER API CALLED ===')
+    console.log('Supabase URL:', process.env.NEXT_PUBLIC_SUPABASE_URL)
+    console.log('Has Anon Key:', !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
+    console.log('Has Service Role:', !!process.env.SUPABASE_SERVICE_ROLE_KEY)
 
+    const body = await req.json()
+    console.log('Request body received:', { email: body.email, name: body.name })
+
+    const { email, password, name } = registerSchema.parse(body)
     console.log('Attempting to create new user:', { email, name })
 
     // Hash the password before storing
     const hashedPassword = await bcrypt.hash(password, 10)
 
     // Check if user already exists
-    const { data: existingUser } = await supabase
+    console.log('Checking for existing user...')
+    const { data: existingUser, error: checkError } = await supabase
       .from('users')
       .select('email')
       .eq('email', email)
       .maybeSingle()
+
+    if (checkError) {
+      console.error('Error checking existing user:', checkError)
+    }
 
     if (existingUser) {
       return NextResponse.json(
@@ -61,9 +72,14 @@ export async function POST(req: NextRequest) {
       .single()
 
     if (error) {
-      console.error('Error creating user:', error)
+      console.error('Error creating user:', {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code
+      })
       return NextResponse.json(
-        { error: error.message || 'Failed to create user', details: error.details || error.hint },
+        { error: error.message || 'Failed to create user', details: error.details || error.hint, code: error.code },
         { status: 500 }
       )
     }

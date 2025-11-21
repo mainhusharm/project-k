@@ -23,14 +23,31 @@ const loginSchema = z.object({
 
 export async function POST(req: NextRequest) {
   try {
+    console.log('=== LOGIN API CALLED ===')
+    console.log('Supabase URL:', process.env.NEXT_PUBLIC_SUPABASE_URL)
+    console.log('Has Anon Key:', !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
+    console.log('Has Service Role:', !!process.env.SUPABASE_SERVICE_ROLE_KEY)
+
     const body = await req.json()
+    console.log('Login attempt for:', body.email)
     const { email, password } = loginSchema.parse(body)
 
-    const { data: user } = await supabase
+    console.log('Querying user from database...')
+    const { data: user, error: queryError } = await supabase
       .from('users')
       .select('*')
       .eq('email', email)
       .maybeSingle()
+
+    if (queryError) {
+      console.error('Database query error:', queryError)
+      return NextResponse.json(
+        { error: 'Database error', details: queryError.message },
+        { status: 500 }
+      )
+    }
+
+    console.log('User found:', !!user)
 
     if (!user) {
       return NextResponse.json(
@@ -68,6 +85,7 @@ export async function POST(req: NextRequest) {
 
     return response
   } catch (error) {
+    console.error('Login error:', error)
     if (error instanceof z.ZodError) {
       return NextResponse.json(
         { error: error.errors[0].message },
@@ -75,7 +93,7 @@ export async function POST(req: NextRequest) {
       )
     }
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Internal server error', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     )
   }
